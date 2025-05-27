@@ -1,108 +1,190 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
-from marshmallow import ValidationError
+# app/routes/auth.py
+from flask import Blueprint, request, jsonify, current_app
+from flask_cors import cross_origin
 from app.services.auth_service import AuthService
-from app.schemas.user_schema import UserRegistrationSchema, UserLoginSchema
 from app.models.user import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/register', methods=['POST'])
+@auth_bp.route('/register', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
 def register():
     """Register a new user"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
-        schema = UserRegistrationSchema()
-        user_data = schema.load(request.json)
+        data = request.get_json()
         
-        result = AuthService.register_user(user_data)
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        logger.info(f"Registration attempt for email: {data.get('email', 'unknown')}")
+        
+        # Validate required fields on the route level as well
+        required_fields = ['name', 'email', 'password']
+        for field in required_fields:
+            if field not in data or not str(data[field]).strip():
+                return jsonify({
+                    'success': False,
+                    'error': f'Missing required field: {field}'
+                }), 400
+        
+        # Additional validation
+        if len(data['password']) < 8:
+            return jsonify({
+                'success': False,
+                'error': 'Password must be at least 8 characters long'
+            }), 400
+        
+        if not User.validate_email(data['email']):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+        
+        # Validate phone if provided
+        if data.get('phone') and not User.validate_phone(data['phone']):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid phone number format'
+            }), 400
+        
+        # Validate role
+        valid_roles = ['donor', 'admin']
+        role = data.get('role', 'donor')
+        if role not in valid_roles:
+            return jsonify({
+                'success': False,
+                'error': f'Invalid role. Must be one of: {", ".join(valid_roles)}'
+            }), 400
+        
+        # Call service to register user
+        result = AuthService.register_user(data)
         
         if result['success']:
-            return jsonify({
-                'message': 'User registered successfully',
-                'user': result['user']
-            }), 201
+            logger.info(f"User registered successfully: {data['email']}")
+            return jsonify(result), 201
         else:
-            return jsonify({'error': result['error']}), 400
+            logger.warning(f"Registration failed for {data.get('email', 'unknown')}: {result['error']}")
+            return jsonify(result), 400
             
-    except ValidationError as e:
-        return jsonify({'error': 'Validation failed', 'details': e.messages}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Registration error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error. Please try again.'
+        }), 500
 
-@auth_bp.route('/login', methods=['POST'])
+@auth_bp.route('/login', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
 def login():
     """Login user"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
-        schema = UserLoginSchema()
-        login_data = schema.load(request.json)
+        data = request.get_json()
         
-        result = AuthService.login_user(
-            login_data['email'],
-            login_data['password']
-        )
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        
+        if not email or not password:
+            return jsonify({
+                'success': False,
+                'error': 'Email and password are required'
+            }), 400
+        
+        logger.info(f"Login attempt for email: {email}")
+        
+        # Call service to login user
+        result = AuthService.login_user(email, password)
         
         if result['success']:
-            return jsonify({
-                'message': 'Login successful',
-                'access_token': result['access_token'],
-                'refresh_token': result['refresh_token'],
-                'user': result['user']
-            }), 200
+            logger.info(f"User logged in successfully: {email}")
+            return jsonify(result), 200
         else:
-            return jsonify({'error': result['error']}), 401
+            logger.warning(f"Login failed for {email}: {result['error']}")
+            return jsonify(result), 401
             
-    except ValidationError as e:
-        return jsonify({'error': 'Validation failed', 'details': e.messages}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error. Please try again.'
+        }), 500
 
-@auth_bp.route('/refresh', methods=['POST'])
-@jwt_required(refresh=True)
-def refresh():
-    """Refresh access token"""
+@auth_bp.route('/check-email', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
+def check_email():
+    """Check if email already exists"""
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        data = request.get_json()
         
-        if not user or not user.is_active:
-            return jsonify({'error': 'User not found or inactive'}), 401
+        if not data or 'email' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'Email is required'
+            }), 400
         
-        new_token = create_access_token(identity=current_user_id)
+        email = data['email'].strip().lower()
+        
+        if not User.validate_email(email):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid email format'
+            }), 400
+        
+        user = AuthService.get_user_by_email(email)
         
         return jsonify({
-            'access_token': new_token
+            'success': True,
+            'exists': user is not None
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Check email error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error. Please try again.'
+        }), 500
 
-@auth_bp.route('/me', methods=['GET'])
-@jwt_required()
-def get_current_user():
-    """Get current logged-in user details"""
+@auth_bp.route('/user/<int:user_id>', methods=['GET'])
+@cross_origin(origins=['http://localhost:3000'])
+def get_user(user_id):
+    """Get user by ID"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
+        user = AuthService.get_user_by_id(user_id)
         
-        if not user or not user.is_active:
-            return jsonify({'error': 'User not found or inactive'}), 401
+        if not user:
+            return jsonify({
+                'success': False,
+                'error': 'User not found'
+            }), 404
         
         return jsonify({
-            'user': user.to_dict()
+            'success': True,
+            'user': user.to_dict_safe()  # Use safe version to avoid sensitive data
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@auth_bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    """Logout user (client-side token invalidation)"""
-    try:
-        # In a production app, you might want to blacklist the token
+        logger.error(f"Get user error: {str(e)}")
         return jsonify({
-            'message': 'Logged out successfully'
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            'success': False,
+            'error': 'Internal server error. Please try again.'
+        }), 500

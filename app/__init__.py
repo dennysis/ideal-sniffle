@@ -26,24 +26,36 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    CORS(app)
+    
+    # Enable CORS
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
+    
+    # Import models
+    from app.models.sponsored_child import SponsoredChild
+    from app.models.report import Report  # 👈 add this
+    
+    # Import and register blueprints
     from app.routes.user_routes import user_bp
     from app.routes.auth_routes import auth_bp
     from app.routes.orphanage_routes import orphanage_bp
     from app.routes.analytics_routes import analytics_bp
     from app.routes.donation_routes import donation_bp
     from app.routes.notification_routes import notification_bp
+    from app.routes.sponsor_routes import sponsor_bp
+    from app.routes.sponsorship_routes import sponsorship_bp
+    from app.routes.report_routes import report_bp  # 👈 add this too
 
-    
-
+    # Register blueprints
     app.register_blueprint(orphanage_bp, url_prefix='/api/orphanages')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(user_bp, url_prefix='/api/users')
     app.register_blueprint(donation_bp, url_prefix='/api/donations')
     app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
     app.register_blueprint(notification_bp, url_prefix='/api/notifications')
-    
-    
+    app.register_blueprint(sponsor_bp, url_prefix='/api')
+    app.register_blueprint(sponsorship_bp, url_prefix='/api')
+    app.register_blueprint(report_bp, url_prefix='/api/reports')  # 👈 final add
+
     @app.route('/')
     def home():
         return {'message': 'Aid Platform API', 'status': 'running'}
