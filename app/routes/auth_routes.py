@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=['https://heaven-1-nwis.onrender.com'], methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
 def register():
     """Register a new user"""
     if request.method == 'OPTIONS':
@@ -83,7 +83,7 @@ def register():
         }), 500
 
 @auth_bp.route('/login', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=['https://heaven-1-nwis.onrender.com'], methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
 def login():
     """Login user"""
     if request.method == 'OPTIONS':
@@ -127,7 +127,7 @@ def login():
         }), 500
 
 @auth_bp.route('/check-email', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=['https://heaven-1-nwis.onrender.com'], methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin(origins=['http://localhost:3000'], methods=['GET', 'POST', 'OPTIONS'])
 def check_email():
     """Check if email already exists"""
     if request.method == 'OPTIONS':
@@ -165,7 +165,7 @@ def check_email():
         }), 500
 
 @auth_bp.route('/user/<int:user_id>', methods=['GET'])
-@cross_origin(origins=['https://heaven-1-nwis.onrender.com'])
+@cross_origin(origins=['http://localhost:3000'])
 def get_user(user_id):
     """Get user by ID"""
     try:

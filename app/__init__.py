@@ -28,7 +28,7 @@ def create_app():
     jwt.init_app(app)
     
     # Enable CORS
-    CORS(app, resources={r"/api/*": {"origins": "https://heaven-1-nwis.onrender.com"}})
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
     
     # Import models
     from app.models.sponsored_child import SponsoredChild
